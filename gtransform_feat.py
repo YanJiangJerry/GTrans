@@ -241,8 +241,12 @@ class FeatAgent:
         # reset_args(args)
         if args.model == "GCN" or args.model == "GCNSLAPS":
             save_mem = False
+            # if args.dataset == "cora" or args.dataset == "amazon-photo" or args.dataset == "fb100" :
+            #     args.with_bn = 1
+            # else:
+            #     args.with_bn = 0
             model = GCN(nfeat=feat.shape[1], nhid=args.hidden, dropout=args.dropout, nlayers=args.nlayers,
-                        weight_decay=args.weight_decay, with_bn=True, lr=args.lr, save_mem=save_mem,
+                        weight_decay=args.weight_decay, with_bn=args.with_bn, lr=args.lr, save_mem=save_mem,
                         nclass=max(labels).item()+1, device=device, args=args).to(device)
 
         elif args.model == "GAT":
@@ -280,15 +284,20 @@ class FeatAgent:
 
         import os.path as osp
         if args.ood:
-            filename = f'saved/{args.dataset}_{args.model}_s{args.seed}.pt'
-            if args.model == "GCNSLAPS":
-                filename = f'saved/{args.dataset}_GCN_s{args.seed}.pt'
+            if is_undirected(edge_index):
+                print('undirected')
+                filename = f'saved/arxiv/{args.dataset}_{args.model}_s{args.seed}.pt'
+            else:
+                print('directed')
+                filename = f'saved/arxiv/directed_{args.dataset}_{args.model}_s{args.seed}.pt'
+
         else:
             filename = f'saved_no_ood/{args.dataset}_{args.model}_s{args.seed}.pt'
         if args.debug and osp.exists(filename):
             model.load_state_dict(torch.load(filename, map_location=self.device))
         else:
-            train_iters = 500 if args.dataset == 'ogb-arxiv' else 200
+            # train_iters = 500 if args.dataset == 'ogb-arxiv' else 200
+            train_iters = 1000 if args.dataset == 'ogb-arxiv' else 500
             model.fit_inductive(data_all, train_iters=train_iters, patience=500, verbose=True)
             if args.debug:
                 torch.save(model.state_dict(), filename)

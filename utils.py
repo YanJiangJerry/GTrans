@@ -162,10 +162,15 @@ def reset_args(args):
 
     elif args.dataset == 'ogb-arxiv':
         if args.ood:
+            # args.lr = 0.01
+            # args.nlayers=5
+            # args.hidden = 32
+            # args.weight_decay = 0
             args.lr = 0.01
-            args.nlayers=5
-            args.hidden = 32
-            args.weight_decay = 0
+            args.nlayers= 2
+            args.hidden = 256
+            args.weight_decay = 0.0005
+            args.dropout = 0.5
         else:
             args.lr = 0.01
             args.dropout=0.5

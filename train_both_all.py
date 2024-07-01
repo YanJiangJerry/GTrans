@@ -6,6 +6,8 @@ import torch
 import random
 import time
 import sys
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 st = time.time()
 
 parser = argparse.ArgumentParser()
@@ -35,6 +37,10 @@ parser.add_argument('--tune', type=int, default=1)
 parser.add_argument('--finetune', type=int, default=0, help='whether to finetune the model')
 parser.add_argument('--tent', type=int, default=0, help='use the Tent for finetuning (need to set finetune=1)')
 parser.add_argument('--strategy', type=str, default='dropedge')
+
+parser.add_argument('--un', type=int, default=1, help='directed')
+parser.add_argument('--f', type=int, default=0, help='feature')
+parser.add_argument('--s', type=int, default=0, help='structure')
 args = parser.parse_args()
 
 torch.cuda.set_device(args.gpu_id)
@@ -86,6 +92,14 @@ if args.ood:
 else:
     data = get_dataset(args.dataset, args.normalize_features)
 
+# # make undirected
+if args.un:
+    for d in data:
+        if type(d) is not list:
+            d.graph['edge_index'] = to_undirected(d.graph['edge_index'])
+        else:
+            for i in d:
+                i.graph['edge_index'] = to_undirected(i.graph['edge_index'])
 
 # random seed setting
 random.seed(args.seed)
@@ -94,6 +108,7 @@ torch.manual_seed(args.seed)
 torch.cuda.manual_seed(args.seed)
 
 res = []
+res0 = []
 agent = GraphAgent(data, args)
 
 if args.test_val:
@@ -124,8 +139,9 @@ else:
             if args.finetune:
                 acc, output, labels = agent.finetune(test_data)
             else:
-                acc, output, labels = agent.learn_graph(test_data)
+                acc, output, labels, acc0 = agent.learn_graph(test_data)
             res.append(acc)
+            res0.append(acc0)
             y_te.append(labels)
             out_te.append(output)
 
@@ -140,10 +156,10 @@ else:
             if args.finetune:
                 acc, output, labels = agent.finetune(test_data)
             else:
-                acc, output, labels = agent.learn_graph(test_data)
+                acc, output, labels, acc0 = agent.learn_graph(test_data)
             y_te.append(labels)
             out_te.append(output)
-
+            res0.append(acc0)
             y_te_all.append(labels)
             out_te_all.append(output)
 
@@ -158,4 +174,6 @@ else:
 
     print('Results on test sets:', res)
     print('Mean result on test sets:', np.mean(res))
+    print(np.mean(res0))
+    print(np.mean(res))
 

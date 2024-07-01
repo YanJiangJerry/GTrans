@@ -52,6 +52,9 @@ class GraphAgent(EdgeAgent):
 
         feat, labels = data.graph['node_feat'].to(self.device), data.label.to(self.device)#.squeeze()
         edge_index = data.graph['edge_index'].to(self.device)
+        output0 = model.predict(feat+delta_feat, edge_index)
+        acc0 = self.evaluate_single(model, output0, labels, data)
+
         self.edge_index, self.feat, self.labels = edge_index, feat, labels
         self.edge_weight = torch.ones(self.edge_index.shape[1]).to(self.device)
 
@@ -64,72 +67,80 @@ class GraphAgent(EdgeAgent):
         edge_index, edge_weight = edge_index, None
 
         for it in tqdm(range(args.epochs//(args.loop_feat+args.loop_adj))):
-            for loop_feat in range(args.loop_feat):
-                self.optimizer_feat.zero_grad()
-                loss = self.test_time_loss(model, feat+delta_feat, edge_index, edge_weight)
-                loss.backward()
+            if args.f:
+                for loop_feat in range(args.loop_feat):
+                    self.optimizer_feat.zero_grad()
+                    loss = self.test_time_loss(model, feat+delta_feat, edge_index, edge_weight)
+                    loss.backward()
 
-                if loop_feat == 0:
-                    print(f'Epoch {it}, Loop Feat {loop_feat}: {loss.item()}')
+                    if loop_feat == 0:
+                        print(f'Epoch {it}, Loop Feat {loop_feat}: {loss.item()}')
 
-                self.optimizer_feat.step()
-                if args.debug==2 or args.debug==3:
-                    output = model.predict(feat+delta_feat, edge_index, edge_weight)
-                    print('Debug Test:', self.evaluate_single(model, output, labels, data, verbose=0))
+                    self.optimizer_feat.step()
+                    if args.debug==2 or args.debug==3:
+                        output = model.predict(feat+delta_feat, edge_index, edge_weight)
+                        print('Debug Test:', self.evaluate_single(model, output, labels, data, verbose=0))
 
-            new_feat = (feat+delta_feat).detach()
-            for loop_adj in range(args.loop_adj):
-                self.perturbed_edge_weight.requires_grad = True
-                edge_index, edge_weight  = self.get_modified_adj()
-                if torch.cuda.is_available() and self.do_synchronize:
-                    torch.cuda.empty_cache()
-                    torch.cuda.synchronize()
-
-                loss = self.test_time_loss(model, new_feat, edge_index, edge_weight)
-
-                gradient = grad_with_checkpoint(loss, self.perturbed_edge_weight)[0]
-                if not args.existing_space:
+            if args.s:
+                new_feat = (feat+delta_feat).detach()
+                for loop_adj in range(args.loop_adj):
+                    self.perturbed_edge_weight.requires_grad = True
+                    edge_index, edge_weight  = self.get_modified_adj()
                     if torch.cuda.is_available() and self.do_synchronize:
                         torch.cuda.empty_cache()
                         torch.cuda.synchronize()
 
-                if loop_adj == 0:
-                    print(f'Epoch {it}, Loop Adj {loop_adj}: {loss.item()}')
+                    loss = self.test_time_loss(model, new_feat, edge_index, edge_weight)
 
-                with torch.no_grad():
-                    self.update_edge_weights(n_perturbations, it, gradient)
-                    self.perturbed_edge_weight = self.project(
-                        n_perturbations, self.perturbed_edge_weight, self.eps)
-                    del edge_index, edge_weight #, logits
+                    gradient = grad_with_checkpoint(loss, self.perturbed_edge_weight)[0]
                     if not args.existing_space:
-                        if it < self.epochs_resampling - 1:
-                            self.resample_random_block(n_perturbations)
-                if it < self.epochs_resampling - 1:
-                    self.perturbed_edge_weight.requires_grad = True
-                    self.optimizer_adj = torch.optim.Adam([self.perturbed_edge_weight], lr=args.lr_adj)
+                        if torch.cuda.is_available() and self.do_synchronize:
+                            torch.cuda.empty_cache()
+                            torch.cuda.synchronize()
 
-            # edge_index, edge_weight = self.sample_final_edges(n_perturbations, data)
+                    if loop_adj == 0:
+                        print(f'Epoch {it}, Loop Adj {loop_adj}: {loss.item()}')
+
+                    with torch.no_grad():
+                        self.update_edge_weights(n_perturbations, it, gradient)
+                        self.perturbed_edge_weight = self.project(
+                            n_perturbations, self.perturbed_edge_weight, self.eps)
+                        del edge_index, edge_weight #, logits
+                        if not args.existing_space:
+                            if it < self.epochs_resampling - 1:
+                                self.resample_random_block(n_perturbations)
+                    if it < self.epochs_resampling - 1:
+                        self.perturbed_edge_weight.requires_grad = True
+                        self.optimizer_adj = torch.optim.Adam([self.perturbed_edge_weight], lr=args.lr_adj)
+            if args.s:
+                # edge_index, edge_weight = self.sample_final_edges(n_perturbations, data)
+                if args.loop_adj != 0:
+                    edge_index, edge_weight  = self.get_modified_adj()
+                    edge_weight = edge_weight.detach()
+
+        # print(f'Epoch {it+1}: {loss}')
+        # gpu_mem = get_gpu_memory_map()
+        # print(f'Mem used: {int(gpu_mem[args.gpu_id])-int(mem_st[args.gpu_id])}MB')
+
+        if args.s:
             if args.loop_adj != 0:
-                edge_index, edge_weight  = self.get_modified_adj()
-                edge_weight = edge_weight.detach()
+                edge_index, edge_weight = self.sample_final_edges(n_perturbations, data)
 
-        print(f'Epoch {it+1}: {loss}')
-        gpu_mem = get_gpu_memory_map()
-        print(f'Mem used: {int(gpu_mem[args.gpu_id])-int(mem_st[args.gpu_id])}MB')
+        if args.f:
+            with torch.no_grad():
+                loss = self.test_time_loss(model, feat+delta_feat, edge_index, edge_weight)
+        else:
+            with torch.no_grad():
+                loss = self.test_time_loss(model, feat, edge_index, edge_weight)
 
-        if args.loop_adj != 0:
-            edge_index, edge_weight = self.sample_final_edges(n_perturbations, data)
-
-        with torch.no_grad():
-            loss = self.test_time_loss(model, feat+delta_feat, edge_index, edge_weight)
         print('final loss:', loss.item())
         output = model.predict(feat+delta_feat, edge_index, edge_weight)
         print('Test:')
 
         if args.dataset == 'elliptic':
-            return self.evaluate_single(model, output, labels, data), output[data.mask], labels[data.mask]
+            return self.evaluate_single(model, output, labels, data), output[data.mask], labels[data.mask], acc0
         else:
-            return self.evaluate_single(model, output, labels, data), output, labels
+            return self.evaluate_single(model, output, labels, data), output, labels, acc0
 
     def augment(self, strategy='dropedge', p=0.5, edge_index=None, edge_weight=None):
         model = self.model
