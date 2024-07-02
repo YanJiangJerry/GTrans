@@ -286,13 +286,11 @@ class FeatAgent:
         if args.ood:
             if is_undirected(edge_index):
                 print('undirected')
-                filename = f'saved/arxiv/{args.dataset}_{args.model}_s{args.seed}.pt'
+                filename = f'saved/{args.dataset}_{args.model}_s{args.seed}.pt'
             else:
                 print('directed')
-                filename = f'saved/arxiv/directed_{args.dataset}_{args.model}_s{args.seed}.pt'
-
-        else:
-            filename = f'saved_no_ood/{args.dataset}_{args.model}_s{args.seed}.pt'
+                filename = f'saved/directed_{args.dataset}_{args.model}_s{args.seed}.pt'
+ 
         if args.debug and osp.exists(filename):
             model.load_state_dict(torch.load(filename, map_location=self.device))
         else:
@@ -301,6 +299,7 @@ class FeatAgent:
             model.fit_inductive(data_all, train_iters=train_iters, patience=500, verbose=True)
             if args.debug:
                 torch.save(model.state_dict(), filename)
+
         if args.model == "GCNSLAPS":
             assert args.debug > 0
             model.setup_dae(feat.shape[1], nhid=args.hidden, nclass=feat.shape[1])

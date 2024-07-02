@@ -1,15 +1,15 @@
 """
 use test data to calculate the loss in SRGNN
 """
+import torch
+import wandb
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
 from copy import deepcopy
 from deeprobust.graph import utils
 import torch.nn as nn
-import torch
 from torch_geometric.utils import dropout_adj
-
 
 class BaseModel(nn.Module):
     def __init__(self):
@@ -44,11 +44,14 @@ class BaseModel(nn.Module):
         # optimizer = optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         optimizer = optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
 
-        train_data, val_data = self.train_data, self.val_data
+        train_data, val_data, test_data = self.train_data, self.val_data, self.test_data[0]
 
         early_stopping = patience
         # best_loss_val = 100
         best_acc_val = float('-inf')
+
+        x_test, y_test = test_data.graph['node_feat'].to(self.device), test_data.label.to(self.device)#.squeeze()
+        edge_index_test = test_data.graph['edge_index'].to(self.device)
 
         if type(train_data) is not list:
             x, y = train_data.graph['node_feat'].to(self.device), train_data.label.to(self.device)#.squeeze()
@@ -56,6 +59,9 @@ class BaseModel(nn.Module):
 
             x_val, y_val = val_data.graph['node_feat'].to(self.device), val_data.label.to(self.device)#.squeeze()
             edge_index_val = val_data.graph['edge_index'].to(self.device)
+
+            # x_test, y_test = test_data.graph['node_feat'].to(self.device), test_data.label.to(self.device)#.squeeze()
+            # edge_index_test = test_data.graph['edge_index'].to(self.device)
 
         for i in range(train_iters):
             self.train()
@@ -88,15 +94,28 @@ class BaseModel(nn.Module):
 
             if verbose and i % 10 == 0:
                 print('Epoch {}, training loss: {}'.format(i, loss_train.item()))
+                # if self.args.wandb:
+                #     wandb.log({
+                #         'epoch': i,
+                #         'train_loss': loss_train.item(),
+                #         'val_loss': loss_val.item(),
+                #         'test_loss': loss_test.item()
+                #     })
 
             self.eval()
             eval_func = self.eval_func
             if self.args.dataset in ['ogb-arxiv']:
                 output = self.forward(x_val, edge_index_val)
                 acc_val = eval_func(y_val[val_data.test_mask], output[val_data.test_mask])
+
+                output_test = self.forward(x_test, edge_index_test)
+                acc_test = eval_func(y_test[test_data.test_mask], output_test[test_data.test_mask])
             elif self.args.dataset in ['cora', 'amazon-photo', 'twitch-e']:
                 output = self.forward(x_val, edge_index_val)
                 acc_val = eval_func(y_val, output)
+
+                output_test = self.forward(x_test, edge_index_test)
+                acc_test = eval_func(y_test, output_test)
             elif self.args.dataset in ['fb100']:
                 y_val, out_val = [], []
                 for i, dataset in enumerate(val_data):
@@ -106,6 +125,9 @@ class BaseModel(nn.Module):
                     y_val.append(dataset.label.to(self.device))
                     out_val.append(out)
                 acc_val = eval_func(torch.cat(y_val, dim=0), torch.cat(out_val, dim=0))
+
+                output_test = self.forward(x_test, edge_index_test)
+                acc_test = eval_func(y_test, output_test)
             elif self.args.dataset in ['elliptic']:
                 # acc_val = eval_func(y_val, output)
                 y_val, out_val = [], []
@@ -116,6 +138,9 @@ class BaseModel(nn.Module):
                     y_val.append(dataset.label[dataset.mask].to(self.device))
                     out_val.append(out[dataset.mask])
                 acc_val = eval_func(torch.cat(y_val, dim=0), torch.cat(out_val, dim=0))
+
+                output_test = self.forward(x_test, edge_index_test)
+                acc_test = eval_func(y_test, output_test)
             else:
                 raise NotImplementedError
 
@@ -126,6 +151,15 @@ class BaseModel(nn.Module):
                 patience = early_stopping
             else:
                 patience -= 1
+
+            if self.args.wandb:
+                    wandb.log({
+                        'epoch': i,
+                        'train_loss': loss_train.item(),
+                        'val_acc': acc_val,
+                        'test_acc': acc_test,
+                    })
+
             if i > early_stopping and patience <= 0:
                 break
 

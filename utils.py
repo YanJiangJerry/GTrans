@@ -166,6 +166,7 @@ def reset_args(args):
             # args.nlayers=5
             # args.hidden = 32
             # args.weight_decay = 0
+            # # below is a better model hyperparameter set for arxiv
             args.lr = 0.01
             args.nlayers= 2
             args.hidden = 256

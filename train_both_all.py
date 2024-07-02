@@ -1,12 +1,14 @@
-import argparse
-import numpy as np
-from gtransform_both import GraphAgent
-from utils import *
 import torch
 import random
 import time
 import sys
 import warnings
+import wandb
+import argparse
+import numpy as np
+from utils import *
+from gtransform_both import GraphAgent
+
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 st = time.time()
 
@@ -41,6 +43,7 @@ parser.add_argument('--strategy', type=str, default='dropedge')
 parser.add_argument('--un', type=int, default=1, help='directed')
 parser.add_argument('--f', type=int, default=0, help='feature')
 parser.add_argument('--s', type=int, default=0, help='structure')
+parser.add_argument('--wandb', type=int, default=0, help='wandb')
 args = parser.parse_args()
 
 torch.cuda.set_device(args.gpu_id)
@@ -106,6 +109,10 @@ random.seed(args.seed)
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 torch.cuda.manual_seed(args.seed)
+
+if args.wandb:
+    name = args.dataset + "_lr_"+ str(args.lr) +  "_epochs_"+ str(args.epochs) + "_hidden_"+ str(args.hidden) + "_nlayers_"+ str(args.nlayers) 
+    wandb.init(project="GTrans Classifier Loss", name=name)
 
 res = []
 res0 = []
@@ -176,4 +183,7 @@ else:
     print('Mean result on test sets:', np.mean(res))
     print(np.mean(res0))
     print(np.mean(res))
+
+if args.wandb:
+    wandb.finish()
 
