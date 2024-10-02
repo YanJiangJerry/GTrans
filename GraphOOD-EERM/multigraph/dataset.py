@@ -97,14 +97,14 @@ def load_twitch_dataset(data_dir, lang):
 
 def load_fb100_dataset(data_dir, filename):
     feature_vals_all = np.empty((0, 6))
-    for f in ['Penn94', 'Amherst41', 'Cornell5', 'Johns Hopkins55', 'Reed98', 'Caltech36', 'Berkeley13', 'Brown11', 'Columbia2', 'Yale4', 'Virginia63', 'Texas80',
+    for f in ['Penn94', 'Amherst41', 'Cornell5', 'Johns Hopkins55', 'Caltech36', 'Brown11', 'Yale4', 'Texas80',
               'Bingham82', 'Duke14', 'Princeton12', 'WashU32', 'Brandeis99', 'Carnegie49']:
         try:
             A, metadata = load_fb100(data_dir, f)
         except: # TODO
             print('Warning: file not exist!!!')
             continue
-        metadata = metadata.astype(np.int)
+        metadata = metadata.astype(np.int64)
         feature_vals = np.hstack(
             (np.expand_dims(metadata[:, 0], 1), metadata[:, 2:]))
         feature_vals_all = np.vstack(
@@ -114,7 +114,7 @@ def load_fb100_dataset(data_dir, filename):
     A, metadata = load_fb100(data_dir, filename)
     dataset = NCDataset(filename)
     edge_index = torch.tensor(A.nonzero(), dtype=torch.long)
-    metadata = metadata.astype(np.int)
+    metadata = metadata.astype(np.int64)
     label = metadata[:, 1] - 1  # gender label, -1 means unlabeled
 
     # make features into one-hot encodings
