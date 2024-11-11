@@ -73,7 +73,8 @@ def load_elliptic_dataset(data_dir, lang):
     result = pkl.load(open('{}/elliptic/{}.pkl'.format(data_dir, lang), 'rb'))
     A, label, features = result
     dataset = NCDataset(lang)
-    edge_index = torch.tensor(A.nonzero(), dtype=torch.long)
+    nonzero_coords = np.array(A.nonzero())
+    edge_index = torch.tensor(nonzero_coords, dtype=torch.long)
     node_feat = torch.tensor(features, dtype=torch.float)
     num_nodes = node_feat.shape[0]
     dataset.graph = {'edge_index': edge_index,
