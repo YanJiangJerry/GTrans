@@ -7,7 +7,7 @@ declare -A acc1
 # 遍历所有种子、模型和数据集
 for s in {0..9}
 do
-    for m in GCN SAGE GAT GPR
+    for m in GCN
     do
         for dataset in ogb-arxiv 
         do
@@ -23,7 +23,7 @@ do
             fi
 
             # 运行Python脚本并保存输出到临时文件
-            output=$(python train_both_all.py --seed=$s --gpu_id=0 --model=$m --tune=0 --dataset=$dataset --debug=1 --f=1 --s=1 --un=0)
+            output=$(python train_both_all.py --seed=$s --gpu_id=0 --model=$m --tune=0 --dataset=$dataset --debug=1 --f=1 --s=1 --un=0 --wandb=1)
 
             # 提取最后两行
             last_two_lines=$(echo "$output" | tail -n 2)
@@ -40,9 +40,9 @@ do
 done
 
 # 将结果写入CSV文件
-for dataset in ogb-arxiv twitch-e
+for dataset in ogb-arxiv
 do
-    for m in GCN SAGE GAT GPR
+    for m in GCN 
     do
         # 初始化每行的内容，以模型名开头
         acc0_line="$m"

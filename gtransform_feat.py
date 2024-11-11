@@ -245,6 +245,7 @@ class FeatAgent:
             #     args.with_bn = 1
             # else:
             #     args.with_bn = 0
+         
             model = GCN(nfeat=feat.shape[1], nhid=args.hidden, dropout=args.dropout, nlayers=args.nlayers,
                         weight_decay=args.weight_decay, with_bn=args.with_bn, lr=args.lr, save_mem=save_mem,
                         nclass=max(labels).item()+1, device=device, args=args).to(device)
